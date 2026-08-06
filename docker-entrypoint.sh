@@ -155,7 +155,6 @@ extprocessor proxy_backend {
 context /.well-known/acme-challenge/ {
     type                    static
     location                $VHOST_ROOT/html/.well-known/acme-challenge/
-    accessible              1
     allowBrowse             0
 }
 
