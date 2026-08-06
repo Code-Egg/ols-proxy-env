@@ -4,7 +4,6 @@ set -Eeuo pipefail
 : "${BACKEND_IP:?BACKEND_IP is required}"
 : "${BACKEND_PORT:?BACKEND_PORT is required}"
 : "${DOMAIN:?DOMAIN is required}"
-: "${ACME_EMAIL:?ACME_EMAIL is required}"
 
 if [[ ! "$BACKEND_PORT" =~ ^[0-9]+$ ]] || (( BACKEND_PORT < 1 || BACKEND_PORT > 65535 )); then
     echo "BACKEND_PORT must be an integer between 1 and 65535" >&2
@@ -25,35 +24,38 @@ SERVER_ROOT=/usr/local/lsws
 CONF_ROOT="$SERVER_ROOT/conf"
 VHOST_ROOT=/var/www/vhosts/Example
 VHOST_CONF="$CONF_ROOT/vhosts/Example/vhconf.conf"
-ACME_HOME=/root/.acme.sh
-ACME_ROOT="$ACME_HOME/ols-proxy/$DOMAIN"
-ACME_STATE_ROOT=/var/lib/ols-proxy
-ACME_ISSUED_MARKER="$ACME_STATE_ROOT/$DOMAIN.issued"
-ACME_ATTEMPTED_MARKER="$ACME_STATE_ROOT/$DOMAIN.attempted"
-ACME_WEBROOT="$VHOST_ROOT/html"
+BASE_CONFIG="$CONF_ROOT/httpd_config.conf.ols-proxy-base"
 
 if [[ ! -f "$CONF_ROOT/httpd_config.conf" ]]; then
-    cp -R "$SERVER_ROOT/.conf/." "$CONF_ROOT/"
+    echo "OpenLiteSpeed configuration is missing" >&2
+    exit 1
+fi
+
+if [[ ! -x "$SERVER_ROOT/admin/misc/install_acme.sh" ]]; then
+    echo "OpenLiteSpeed ACME installer is missing; use an OLS 1.9+ image" >&2
+    exit 1
+fi
+
+if [[ ! -f "$SERVER_ROOT/acme/acme.sh" ]]; then
+    if [[ -n "${ACME_EMAIL:-}" ]]; then
+        "$SERVER_ROOT/admin/misc/install_acme.sh" -e "$ACME_EMAIL"
+    else
+        "$SERVER_ROOT/admin/misc/install_acme.sh"
+    fi
 fi
 
 mkdir -p "$CONF_ROOT/vhosts/Example" "$VHOST_ROOT/html/.well-known/acme-challenge" \
-    "$SERVER_ROOT/logs" "$ACME_STATE_ROOT"
+    "$SERVER_ROOT/logs"
 
-if [[ ! -x "$ACME_HOME/acme.sh" ]]; then
-    echo "ACME client is missing from the OpenLiteSpeed image; HTTPS will use the fallback certificate" >&2
+if [[ ! -f "$BASE_CONFIG" ]]; then
+    cp "$CONF_ROOT/httpd_config.conf" "$BASE_CONFIG"
 fi
-
-cp "$SERVER_ROOT/.conf/httpd_config.conf" "$CONF_ROOT/httpd_config.conf.ols-proxy-base"
 
 TLS_KEY="$SERVER_ROOT/admin/conf/webadmin.key"
 TLS_CERT="$SERVER_ROOT/admin/conf/webadmin.crt"
-if [[ -s "$ACME_ROOT/key.pem" && -s "$ACME_ROOT/fullchain.pem" ]]; then
-    TLS_KEY="$ACME_ROOT/key.pem"
-    TLS_CERT="$ACME_ROOT/fullchain.pem"
-fi
 
 awk '/^listener[[:space:]]+HTTP[[:space:]]*\{/ { exit } { print }' \
-    "$CONF_ROOT/httpd_config.conf.ols-proxy-base" > "$CONF_ROOT/httpd_config.conf.tmp"
+    "$BASE_CONFIG" > "$CONF_ROOT/httpd_config.conf.tmp"
 
 cat >> "$CONF_ROOT/httpd_config.conf.tmp" <<EOF
 
@@ -85,7 +87,7 @@ EOF
 mv "$CONF_ROOT/httpd_config.conf.tmp" "$CONF_ROOT/httpd_config.conf"
 
 cat > "$VHOST_CONF" <<EOF
-docRoot                 $ACME_WEBROOT/
+docRoot                 $VHOST_ROOT/html/
 indexFiles              index.html
 
 errorlog $SERVER_ROOT/logs/Example.error.log {
@@ -97,6 +99,12 @@ accesslog $SERVER_ROOT/logs/Example.access.log {
     rollingSize           10M
     keepDays              7
     compressArchive       1
+}
+
+vhssl {
+    acme {
+        enabled             2
+    }
 }
 
 extprocessor proxy_backend {
@@ -111,7 +119,7 @@ extprocessor proxy_backend {
 
 context /.well-known/acme-challenge/ {
     type                    static
-    location                $ACME_WEBROOT/.well-known/acme-challenge/
+    location                $VHOST_ROOT/html/.well-known/acme-challenge/
     accessible              1
     allowBrowse             0
 }
@@ -128,43 +136,7 @@ EOF
 chown -R lsadm:lsadm "$CONF_ROOT" "$VHOST_ROOT" "$SERVER_ROOT/logs"
 chmod -R u=rwX,go= "$SERVER_ROOT/admin/conf"
 
-start_server() {
-    "$SERVER_ROOT/bin/lswsctrl" start
-}
-
-issue_certificate() {
-    if [[ ! -x "$ACME_HOME/acme.sh" || ( -s "$ACME_ROOT/key.pem" && -s "$ACME_ROOT/fullchain.pem" ) || -f "$ACME_ISSUED_MARKER" || -f "$ACME_ATTEMPTED_MARKER" ]]; then
-        return 0
-    fi
-
-    touch "$ACME_ATTEMPTED_MARKER"
-    echo "Requesting a Let's Encrypt certificate for ${DOMAIN}"
-
-    if "$ACME_HOME/acme.sh" --home "$ACME_HOME" --set-default-ca --server letsencrypt \
-        && "$ACME_HOME/acme.sh" --home "$ACME_HOME" --issue --server letsencrypt \
-        --webroot "$ACME_WEBROOT" --domain "$DOMAIN" --keylength ec-256 \
-        --accountemail "$ACME_EMAIL" \
-        && "$ACME_HOME/acme.sh" --home "$ACME_HOME" --install-cert --ecc \
-        --domain "$DOMAIN" --key-file "$ACME_ROOT/key.pem" \
-        --fullchain-file "$ACME_ROOT/fullchain.pem" --reloadcmd "true"; then
-        touch "$ACME_ISSUED_MARKER"
-        rm -f "$ACME_ATTEMPTED_MARKER"
-        return 0
-    fi
-
-    echo "ACME certificate issuance failed; keeping the fallback HTTPS certificate" >&2
-    return 0
-}
-
-start_server
-issue_certificate
-
-if [[ -s "$ACME_ROOT/key.pem" && -s "$ACME_ROOT/fullchain.pem" ]]; then
-    sed -i "s|^[[:space:]]*keyFile.*|    keyFile                 $ACME_ROOT/key.pem|" "$CONF_ROOT/httpd_config.conf"
-    sed -i "s|^[[:space:]]*certFile.*|    certFile                $ACME_ROOT/fullchain.pem|" "$CONF_ROOT/httpd_config.conf"
-    chown lsadm:lsadm "$CONF_ROOT/httpd_config.conf"
-    "$SERVER_ROOT/bin/lswsctrl" restart
-fi
+"$SERVER_ROOT/bin/lswsctrl start"
 
 while "$SERVER_ROOT/bin/lswsctrl" status | grep -q 'litespeed is running with PID'; do
     sleep 60

@@ -7,7 +7,7 @@ The configuration includes:
 - An OLS `proxy_backend` External App.
 - A RewriteRule that proxies all requests to the backend.
 - HTTP and HTTPS listeners on ports `80` and `443`.
-- Automatic Let's Encrypt certificate issuance on first startup.
+- OpenLiteSpeed native ACME certificate management.
 
 ## Configuration
 
@@ -52,15 +52,15 @@ docker compose logs -f ols-proxy
 
 ## Automatic HTTPS certificate
 
-Automatic certificate issuance is enabled by default. On the first startup, the container starts OpenLiteSpeed with the image's fallback certificate, serves the ACME HTTP challenge from the `Example` vhost, and requests a Let's Encrypt certificate for `DOMAIN`.
+OpenLiteSpeed native ACME is enabled for the `Example` vhost. On the first startup, the container runs the image's `/usr/local/lsws/admin/misc/install_acme.sh` once, then OLS creates and renews the certificate when the secure listener and vhost are loaded.
 
-Certificates are stored under `./acme`, and initialization state is stored under `./state`. A successful issuance is not repeated on subsequent container starts. A failed attempt is also recorded to avoid repeatedly contacting the ACME service; remove the corresponding file under `./state` after fixing DNS, firewall, or port `80` issues and restart the container.
+The complete `/usr/local/lsws` directory is stored in the Docker named volume `lsws_data`. This preserves the ACME installation, account data, configuration, logs, and certificates. Certificates are managed by OLS under `/usr/local/lsws/conf/cert/acme/certs`.
 
 The domain must resolve to the Docker host, and inbound TCP port `80` must be reachable by Let's Encrypt. The default `www.example.com` value is only an example and will not issue a certificate unless it points to your server.
 
 ## Configuration reload behavior
 
-`docker-entrypoint.sh` regenerates the Example vhost and proxy configuration on every container start. It uses the official image's server-level baseline configuration so required settings such as `errorLog` are preserved.
+`docker-entrypoint.sh` regenerates the Example vhost and proxy configuration on every container start. The ACME installation itself runs only when `/usr/local/lsws/acme/acme.sh` does not exist. OLS manages subsequent certificate renewal.
 
 Changing `.env` requires restarting the container:
 
@@ -83,7 +83,7 @@ No Internet-facing service can be guaranteed to be completely secure. This proje
 - Does not expose the OpenLiteSpeed WebAdmin port `7080`.
 - Enables Docker's `no-new-privileges` security option.
 - Keeps the backend destination controlled by `.env`, rather than accepting it from a request.
-- Persists ACME state and avoids repeated certificate issuance attempts.
+- Persists the complete OLS directory, including ACME state and certificates.
 
 For production use, pin `OLS_IMAGE` to a specific version, keep Docker and the image updated, restrict inbound firewall rules, and use a real ACME email address.
 
