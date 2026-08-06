@@ -24,6 +24,8 @@ if [[ ! -f /usr/local/lsws/conf/httpd_config.conf ]]; then
     cp -R /usr/local/lsws/.conf/. /usr/local/lsws/conf/
 fi
 
+cp /usr/local/lsws/.conf/httpd_config.conf /usr/local/lsws/conf/httpd_config.conf
+
 awk '
     /^[[:space:]]*vhssl[[:space:]]*\{/ { skip = 1; next }
     skip && /^[[:space:]]*\}/ { skip = 0; next }
@@ -31,27 +33,35 @@ awk '
 ' /usr/local/lsws/conf/templates/docker.conf \
     > /usr/local/lsws/conf/templates/proxy.conf
 
-cat > /usr/local/lsws/conf/httpd_config.conf <<EOF
-listener HTTP {
-    address                 *:80
-    secure                  0
-}
+sed -i 's/vhDomain[[:space:]]\+localhost,[[:space:]]\*/vhDomain localhost/' \
+    /usr/local/lsws/conf/httpd_config.conf
 
-listener HTTPS {
-    address                 *:443
-    secure                  1
-    keyFile                 /usr/local/lsws/admin/conf/webadmin.key
-    certFile                /usr/local/lsws/admin/conf/webadmin.crt
-}
-
-vhTemplate docker {
-    templateFile            conf/templates/proxy.conf
-    listeners               HTTP, HTTPS
-    member ${DOMAIN} {
-        vhDomain             ${DOMAIN}
+awk -v domain="$DOMAIN" '
+    /^vhTemplate[[:space:]]+docker[[:space:]]*\{/ {
+        in_template = 1
+        template_depth = 1
+        print
+        next
     }
-}
-EOF
+    in_template {
+        line = $0
+        opens = gsub(/\{/, "", line)
+        closes = gsub(/\}/, "", line)
+        if (closes > 0 && template_depth == closes) {
+            print "    member " domain " {"
+            print "        vhDomain             " domain
+            print "    }"
+            print
+            in_template = 0
+            print $0
+            next
+        }
+        template_depth += opens - closes
+    }
+    { print }
+' /usr/local/lsws/conf/httpd_config.conf \
+    > /usr/local/lsws/conf/httpd_config.conf.tmp
+mv /usr/local/lsws/conf/httpd_config.conf.tmp /usr/local/lsws/conf/httpd_config.conf
 
 mkdir -p "/usr/local/lsws/conf/vhosts/${DOMAIN}" /usr/local/lsws/logs
 

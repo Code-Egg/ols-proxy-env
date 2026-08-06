@@ -27,6 +27,8 @@ Start the proxy on the standard HTTP and HTTPS ports:
 docker compose up -d --build
 ```
 
+The Compose file explicitly builds the local `ols-proxy:local` image. It does not pull that image from Docker Hub.
+
 The proxy listens on:
 
 - `80/tcp` for HTTP

@@ -5,6 +5,7 @@ services:
       args:
         OLS_IMAGE: ${OLS_IMAGE:-litespeedtech/openlitespeed:latest}
     image: ols-proxy:local
+    pull_policy: build
     env_file:
       - .env
     ports:
