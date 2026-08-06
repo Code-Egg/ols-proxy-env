@@ -4,16 +4,18 @@ services:
       context: .
       args:
         OLS_IMAGE: ${OLS_IMAGE:-litespeedtech/openlitespeed:latest}
-    image: ols-proxy:local
-    pull_policy: build
     env_file:
       - .env
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./lsws/conf:/usr/local/lsws/conf
       - ./logs:/usr/local/lsws/logs
+      - ./acme:/root/.acme.sh
+      - ./state:/var/lib/ols-proxy
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

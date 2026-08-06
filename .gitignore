@@ -2,3 +2,7 @@
 logs/*
 lsws/conf/*
 !lsws/conf/.gitkeep
+acme/*
+!acme/.gitkeep
+state/*
+!state/.gitkeep
