@@ -89,8 +89,31 @@ fi
 TLS_KEY="$SERVER_ROOT/admin/conf/webadmin.key"
 TLS_CERT="$SERVER_ROOT/admin/conf/webadmin.crt"
 
-awk '/^listener[[:space:]]+HTTP[[:space:]]*\{/ { exit } { print }' \
-    "$BASE_CONFIG" > "$CONF_ROOT/httpd_config.conf.tmp"
+awk '
+function brace_delta(line, opens, closes) {
+    opens = line
+    gsub(/[^\{]/, "", opens)
+    closes = line
+    gsub(/[^\}]/, "", closes)
+    return length(opens) - length(closes)
+}
+
+skip_listener {
+    listener_depth += brace_delta($0)
+    if (listener_depth <= 0) {
+        skip_listener = 0
+    }
+    next
+}
+
+/^[[:space:]]*listener[[:space:]]+[^\{]+\{/ {
+    listener_depth = brace_delta($0)
+    skip_listener = 1
+    next
+}
+
+{ print }
+' "$BASE_CONFIG" > "$CONF_ROOT/httpd_config.conf.tmp"
 
 cat >> "$CONF_ROOT/httpd_config.conf.tmp" <<EOF
 
