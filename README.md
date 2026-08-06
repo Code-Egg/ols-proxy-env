@@ -22,7 +22,7 @@ OLS_IMAGE=litespeedtech/openlitespeed:latest
 BACKEND_IP=192.168.0.1
 BACKEND_PORT=1234
 DOMAIN=www.example.com
-ACME_EMAIL=admin@example.com
+ACME_EMAIL=
 ```
 
 `DOMAIN` is used for the OLS listener mapping and is sent to the backend as the `Host` header.
@@ -91,7 +91,7 @@ docker compose logs -f ols-proxy
 
 OpenLiteSpeed native ACME is enabled at both the server level with `tuning { acme 2 }` and explicitly for the `Example` vhost with `vhssl { acme { enabled 2 } }`. On the first startup, the container runs the image's `/usr/local/lsws/admin/misc/install_acme.sh` once, then OLS creates and renews the certificate when the secure listener and vhost are loaded.
 
-The image also installs `git`, which is required by the native ACME installer to obtain `acme.sh`.
+The image also installs `git`, which is required by the native ACME installer to obtain `acme.sh`. When `ACME_EMAIL` is empty, the entrypoint uses the standard installation command without the advanced email option. When `ACME_EMAIL` is not empty, it uses the advanced installation command with `-e "$ACME_EMAIL"`. Use a real email address if you choose the advanced option.
 
 The complete `/usr/local/lsws` directory is stored in the Docker named volume `lsws_data`. This preserves the ACME installation, account data, configuration, logs, and certificates. Certificates are managed by OLS under `/usr/local/lsws/conf/cert/acme/certs`.
 
