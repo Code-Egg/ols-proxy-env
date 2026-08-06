@@ -84,7 +84,7 @@ docker compose up -d --build
 No Internet-facing service can be guaranteed to be completely secure. This project applies basic defensive measures:
 
 - Validates the backend port, domain, and backend address before writing OLS configuration.
-- Does not expose the OpenLiteSpeed WebAdmin port `7080`.
+- Exposes the OpenLiteSpeed WebAdmin port `7080` as requested; restrict it with a firewall or trusted network.
 - Enables Docker's `no-new-privileges` security option.
 - Keeps the backend destination controlled by `.env`, rather than accepting it from a request.
 - Persists the complete OLS directory, including ACME state and certificates.

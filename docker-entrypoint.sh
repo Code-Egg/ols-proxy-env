@@ -178,7 +178,7 @@ fi
 chown -R lsadm:lsadm "$CONF_ROOT" "$VHOST_ROOT" "$SERVER_ROOT/logs"
 chmod -R u=rwX,go= "$SERVER_ROOT/admin/conf"
 
-"$SERVER_ROOT/bin/lswsctrl start"
+"$SERVER_ROOT/bin/lswsctrl" start
 
 while "$SERVER_ROOT/bin/lswsctrl" status | grep -q 'litespeed is running with PID'; do
     sleep 60
