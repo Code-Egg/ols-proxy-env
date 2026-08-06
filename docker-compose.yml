@@ -11,7 +11,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "7080:7080"
+      # Uncomment to expose the OpenLiteSpeed WebAdmin console.
+      # - "7080:7080"
     volumes:
       - lsws_data:/usr/local/lsws
     security_opt:

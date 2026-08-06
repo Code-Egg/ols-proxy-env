@@ -97,6 +97,26 @@ The complete `/usr/local/lsws` directory is stored in the Docker named volume `l
 
 The domain must resolve to the Docker host, and inbound TCP port `80` must be reachable by Let's Encrypt. The default `www.example.com` value is only an example and will not issue a certificate unless it points to your server.
 
+## WebAdmin password
+
+WebAdmin port `7080` is disabled by default in `docker-compose.yml`. If you need to access WebAdmin, uncomment `- "7080:7080"` under `ports`, then recreate the container:
+
+```sh
+docker compose up -d
+```
+
+After finishing WebAdmin changes, comment the port again and recreate the container to stop publishing it.
+
+Do not commit a WebAdmin password to `.env`. Environment files are plain text and can also be exposed through Docker inspection or operational tooling. For a first-time setup, set or reset the password interactively with the official OLS utility:
+
+```sh
+docker compose exec ols-proxy /usr/local/lsws/admin/misc/admpass.sh
+```
+
+Use the `admin` username when prompted. The WebAdmin credentials are stored in the persisted `lsws_data` volume. Storing a password in `.env` is common for local development, but Docker secrets or an external secret manager are preferable for production.
+
+When `7080` is temporarily enabled, restrict it with a firewall or trusted network. Do not expose WebAdmin publicly unless it is specifically required.
+
 ## Configuration reload behavior
 
 `docker-entrypoint.sh` regenerates the Example vhost and proxy configuration on every container start. The ACME installation itself runs only when `/usr/local/lsws/acme/acme.sh` does not exist. OLS manages subsequent certificate renewal.
