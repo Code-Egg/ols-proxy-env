@@ -70,7 +70,7 @@ if [[ ! -f "$SERVER_ROOT/acme/acme.sh" ]]; then
     fi
 fi
 
-mkdir -p "$CONF_ROOT/vhosts/Example" "$VHOST_ROOT/html" \
+mkdir -p "$CONF_ROOT/vhosts/Example" "$VHOST_ROOT/html/.well-known/acme-challenge" \
     "$SERVER_ROOT/logs"
 
 if [[ ! -f "$BASE_CONFIG" ]]; then
@@ -150,6 +150,13 @@ extprocessor proxy_backend {
     initTimeout             60
     retryTimeout            0
     respBuffer              0
+}
+
+context /.well-known/acme-challenge/ {
+    type                    static
+    location                $VHOST_ROOT/html/.well-known/acme-challenge/
+    accessible              1
+    allowBrowse             0
 }
 
 rewrite  {

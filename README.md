@@ -93,7 +93,7 @@ OpenLiteSpeed native ACME is enabled at both the server level with `tuning { acm
 
 The image also installs `git`, which is required by the native ACME installer to obtain `acme.sh`. When `ACME_EMAIL` is empty, the entrypoint uses the standard installation command without the advanced email option. When `ACME_EMAIL` is not empty, it uses the advanced installation command with `-e "$ACME_EMAIL"`. Use a real email address if you choose the advanced option.
 
-The vhost retains one ACME challenge bypass rule before the catch-all proxy rule. This keeps `/.well-known/acme-challenge/` from being sent to the backend while OLS native ACME handles the challenge.
+The vhost includes an ACME challenge static context and a bypass rule before the catch-all proxy rule. The challenge must be served locally by OLS and must not be sent to the backend.
 
 The complete `/usr/local/lsws` directory is stored in the Docker named volume `lsws_data`. This preserves the ACME installation, account data, configuration, logs, and certificates. Certificates are managed by OLS under `/usr/local/lsws/conf/cert/acme/certs`.
 
