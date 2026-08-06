@@ -156,6 +156,7 @@ rewrite  {
     enable                  1
     autoLoadHtaccess        0
     logLevel                0
+    RewriteRule             ^/\.well-known/acme-challenge/ - [L]
     RewriteRule             ^(.*)$ HTTP://proxy_backend/\$1 [P,L,E=PROXY-HOST:${DOMAIN}]
 }
 EOF
