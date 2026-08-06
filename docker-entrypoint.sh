@@ -5,6 +5,8 @@ set -Eeuo pipefail
 : "${BACKEND_PORT:?BACKEND_PORT is required}"
 : "${DOMAIN:?DOMAIN is required}"
 PROXY_SOCKET="${PROXY_SOCKET:-false}"
+PROXY_IP="${PROXY_IP:-$BACKEND_IP}"
+PROXY_PORT="${PROXY_PORT:-$BACKEND_PORT}"
 
 case "${PROXY_SOCKET,,}" in
     true|false) ;;
@@ -68,7 +70,7 @@ if [[ ! -f "$SERVER_ROOT/acme/acme.sh" ]]; then
     fi
 fi
 
-mkdir -p "$CONF_ROOT/vhosts/Example" "$VHOST_ROOT/html/.well-known/acme-challenge" \
+mkdir -p "$CONF_ROOT/vhosts/Example" "$VHOST_ROOT/html" \
     "$SERVER_ROOT/logs"
 
 if [[ ! -f "$BASE_CONFIG" ]]; then
@@ -150,18 +152,10 @@ extprocessor proxy_backend {
     respBuffer              0
 }
 
-context /.well-known/acme-challenge/ {
-    type                    static
-    location                $VHOST_ROOT/html/.well-known/acme-challenge/
-    accessible              1
-    allowBrowse             0
-}
-
 rewrite  {
     enable                  1
     autoLoadHtaccess        0
     logLevel                0
-    RewriteRule             ^/\.well-known/acme-challenge/ - [L]
     RewriteRule             ^(.*)$ HTTP://proxy_backend/\$1 [P,L,E=PROXY-HOST:${DOMAIN}]
 }
 EOF

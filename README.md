@@ -27,7 +27,42 @@ ACME_EMAIL=admin@example.com
 
 `DOMAIN` is used for the OLS listener mapping and is sent to the backend as the `Host` header.
 
-Set `PROXY_SOCKET=true` to add an OpenLiteSpeed WebSocket proxy block using `PROXY_IP` and `PROXY_PORT`. It defaults to `false`, so the WebSocket block is not added unless explicitly enabled.
+`BACKEND_IP` is the backend host, not necessarily a numeric IP address. It may be an IP address, DNS hostname, or Docker service/container name such as `backend-service` when both containers share a Docker network. Use the backend container port in that case; for example, `backend-service:8080`, not the host-published port from a `host-port:container-port` mapping.
+
+Set `PROXY_SOCKET=true` to add an OpenLiteSpeed WebSocket proxy block. By default, it reuses `BACKEND_IP` and `BACKEND_PORT`, which is the usual setup when HTTP and WebSocket traffic belong to the same application. Set `PROXY_IP` and `PROXY_PORT` only when the WebSocket service uses a different backend.
+
+## Connect another Docker stack
+
+Compose creates a shared bridge network named `ls-net`. Any backend container that should be reached by its Docker service or container name must join this network.
+
+For a backend in another Compose project, add the external network to that project's `docker-compose.yml`:
+
+```yaml
+services:
+  backend:
+    networks:
+      - ls-net
+
+networks:
+  ls-net:
+    external: true
+    name: ls-net
+```
+
+Then use the backend service name and its internal container port in `.env`:
+
+```dotenv
+BACKEND_IP=backend
+BACKEND_PORT=8080
+```
+
+For a container started with `docker run`, attach it to the shared network:
+
+```sh
+docker network connect ls-net <backend-container-name>
+```
+
+Use the container's internal listening port, not a host port mapping. For example, a `3000:8080` mapping is reached from OLS as `backend:8080` when both containers use `ls-net`.
 
 ## Start and stop
 
