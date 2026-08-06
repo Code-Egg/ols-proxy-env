@@ -11,6 +11,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "7080:7080"
     volumes:
       - ./lsws/conf:/usr/local/lsws/conf
       - ./logs:/usr/local/lsws/logs
