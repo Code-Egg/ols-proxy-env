@@ -19,8 +19,8 @@ cp .env.example .env
 
 ```dotenv
 OLS_IMAGE=litespeedtech/openlitespeed:latest
-BACKEND_IP=192.168.0.100
-BACKEND_PORT=5678
+BACKEND_IP=192.168.0.1
+BACKEND_PORT=1234
 DOMAIN=www.example.com
 ACME_EMAIL=admin@example.com
 ```
