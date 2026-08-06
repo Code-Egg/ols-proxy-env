@@ -152,17 +152,11 @@ extprocessor proxy_backend {
     respBuffer              0
 }
 
-context /.well-known/acme-challenge/ {
-    type                    static
-    location                $VHOST_ROOT/html/.well-known/acme-challenge/
-    allowBrowse             0
-}
-
 rewrite  {
     enable                  1
     autoLoadHtaccess        0
     logLevel                0
-    RewriteRule             ^/\.well-known/acme-challenge/ - [L]
+    RewriteCond             %{REQUEST_URI} !^/\.well-known/acme-challenge/
     RewriteRule             ^(.*)$ HTTP://proxy_backend/\$1 [P,L,E=PROXY-HOST:${DOMAIN}]
 }
 EOF
