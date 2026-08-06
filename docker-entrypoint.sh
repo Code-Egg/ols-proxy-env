@@ -5,8 +5,8 @@ set -Eeuo pipefail
 : "${BACKEND_PORT:?BACKEND_PORT is required}"
 : "${DOMAIN:?DOMAIN is required}"
 PROXY_SOCKET="${PROXY_SOCKET:-false}"
-PROXY_IP="${PROXY_IP:-$BACKEND_IP}"
-PROXY_PORT="${PROXY_PORT:-$BACKEND_PORT}"
+PROXY_SOCKET_IP="${PROXY_SOCKET_IP:-$BACKEND_IP}"
+PROXY_SOCKET_PORT="${PROXY_SOCKET_PORT:-$BACKEND_PORT}"
 
 case "${PROXY_SOCKET,,}" in
     true|false) ;;
@@ -32,16 +32,16 @@ if [[ ! "$BACKEND_IP" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
 fi
 
 if [[ "${PROXY_SOCKET,,}" == "true" ]]; then
-    : "${PROXY_IP:?PROXY_IP is required when PROXY_SOCKET=true}"
-    : "${PROXY_PORT:?PROXY_PORT is required when PROXY_SOCKET=true}"
+    : "${PROXY_SOCKET_IP:?PROXY_SOCKET_IP is required when PROXY_SOCKET=true}"
+    : "${PROXY_SOCKET_PORT:?PROXY_SOCKET_PORT is required when PROXY_SOCKET=true}"
 
-    if [[ ! "$PROXY_PORT" =~ ^[0-9]+$ ]] || (( PROXY_PORT < 1 || PROXY_PORT > 65535 )); then
-        echo "PROXY_PORT must be an integer between 1 and 65535" >&2
+    if [[ ! "$PROXY_SOCKET_PORT" =~ ^[0-9]+$ ]] || (( PROXY_SOCKET_PORT < 1 || PROXY_SOCKET_PORT > 65535 )); then
+        echo "PROXY_SOCKET_PORT must be an integer between 1 and 65535" >&2
         exit 1
     fi
 
-    if [[ ! "$PROXY_IP" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
-        echo "PROXY_IP contains unsupported characters" >&2
+    if [[ ! "$PROXY_SOCKET_IP" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
+        echo "PROXY_SOCKET_IP contains unsupported characters" >&2
         exit 1
     fi
 fi
@@ -164,7 +164,7 @@ if [[ "${PROXY_SOCKET,,}" == "true" ]]; then
     cat >> "$VHOST_CONF" <<EOF
 
 websocket / {
-    address                 ${PROXY_IP}:${PROXY_PORT}
+    address                 ${PROXY_SOCKET_IP}:${PROXY_SOCKET_PORT}
 }
 EOF
 fi
