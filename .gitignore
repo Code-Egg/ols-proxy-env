@@ -1,0 +1,4 @@
+.env
+logs/*
+lsws/conf/*
+!lsws/conf/.gitkeep
