@@ -16,6 +16,12 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
+    networks:
+      - ls-net
 
 volumes:
   lsws_data:
+
+networks:
+  ls-net:
+    name: ls-net

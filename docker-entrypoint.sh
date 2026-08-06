@@ -4,6 +4,15 @@ set -Eeuo pipefail
 : "${BACKEND_IP:?BACKEND_IP is required}"
 : "${BACKEND_PORT:?BACKEND_PORT is required}"
 : "${DOMAIN:?DOMAIN is required}"
+PROXY_SOCKET="${PROXY_SOCKET:-false}"
+
+case "${PROXY_SOCKET,,}" in
+    true|false) ;;
+    *)
+        echo "PROXY_SOCKET must be true or false" >&2
+        exit 1
+        ;;
+esac
 
 if [[ ! "$BACKEND_PORT" =~ ^[0-9]+$ ]] || (( BACKEND_PORT < 1 || BACKEND_PORT > 65535 )); then
     echo "BACKEND_PORT must be an integer between 1 and 65535" >&2
@@ -18,6 +27,21 @@ fi
 if [[ ! "$BACKEND_IP" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
     echo "BACKEND_IP contains unsupported characters" >&2
     exit 1
+fi
+
+if [[ "${PROXY_SOCKET,,}" == "true" ]]; then
+    : "${PROXY_IP:?PROXY_IP is required when PROXY_SOCKET=true}"
+    : "${PROXY_PORT:?PROXY_PORT is required when PROXY_SOCKET=true}"
+
+    if [[ ! "$PROXY_PORT" =~ ^[0-9]+$ ]] || (( PROXY_PORT < 1 || PROXY_PORT > 65535 )); then
+        echo "PROXY_PORT must be an integer between 1 and 65535" >&2
+        exit 1
+    fi
+
+    if [[ ! "$PROXY_IP" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
+        echo "PROXY_IP contains unsupported characters" >&2
+        exit 1
+    fi
 fi
 
 SERVER_ROOT=/usr/local/lsws
@@ -49,6 +73,15 @@ mkdir -p "$CONF_ROOT/vhosts/Example" "$VHOST_ROOT/html/.well-known/acme-challeng
 
 if [[ ! -f "$BASE_CONFIG" ]]; then
     cp "$CONF_ROOT/httpd_config.conf" "$BASE_CONFIG"
+fi
+
+if grep -Eq '^[[:space:]]*acme[[:space:]]+[01]$' "$BASE_CONFIG"; then
+    sed -i -E 's/^([[:space:]]*acme[[:space:]]*)[01]$/\12/' "$BASE_CONFIG"
+elif ! grep -Eq '^[[:space:]]*acme[[:space:]]+2$' "$BASE_CONFIG"; then
+    sed -i '/^tuning[[:space:]]*{$/,/^}$/ {
+        /^}$/i\
+            acme                    2
+    }' "$BASE_CONFIG"
 fi
 
 TLS_KEY="$SERVER_ROOT/admin/conf/webadmin.key"
@@ -132,6 +165,15 @@ rewrite  {
     RewriteRule             ^(.*)$ HTTP://proxy_backend/\$1 [P,L,E=PROXY-HOST:${DOMAIN}]
 }
 EOF
+
+if [[ "${PROXY_SOCKET,,}" == "true" ]]; then
+    cat >> "$VHOST_CONF" <<EOF
+
+websocket / {
+    address                 ${PROXY_IP}:${PROXY_PORT}
+}
+EOF
+fi
 
 chown -R lsadm:lsadm "$CONF_ROOT" "$VHOST_ROOT" "$SERVER_ROOT/logs"
 chmod -R u=rwX,go= "$SERVER_ROOT/admin/conf"

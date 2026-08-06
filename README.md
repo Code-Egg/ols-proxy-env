@@ -27,6 +27,8 @@ ACME_EMAIL=admin@example.com
 
 `DOMAIN` is used for the OLS listener mapping and is sent to the backend as the `Host` header.
 
+Set `PROXY_SOCKET=true` to add an OpenLiteSpeed WebSocket proxy block using `PROXY_IP` and `PROXY_PORT`. It defaults to `false`, so the WebSocket block is not added unless explicitly enabled.
+
 ## Start and stop
 
 Start the proxy:
@@ -52,7 +54,9 @@ docker compose logs -f ols-proxy
 
 ## Automatic HTTPS certificate
 
-OpenLiteSpeed native ACME is enabled for the `Example` vhost. On the first startup, the container runs the image's `/usr/local/lsws/admin/misc/install_acme.sh` once, then OLS creates and renews the certificate when the secure listener and vhost are loaded.
+OpenLiteSpeed native ACME is enabled at both the server level with `tuning { acme 2 }` and explicitly for the `Example` vhost with `vhssl { acme { enabled 2 } }`. On the first startup, the container runs the image's `/usr/local/lsws/admin/misc/install_acme.sh` once, then OLS creates and renews the certificate when the secure listener and vhost are loaded.
+
+The image also installs `git`, which is required by the native ACME installer to obtain `acme.sh`.
 
 The complete `/usr/local/lsws` directory is stored in the Docker named volume `lsws_data`. This preserves the ACME installation, account data, configuration, logs, and certificates. Certificates are managed by OLS under `/usr/local/lsws/conf/cert/acme/certs`.
 
