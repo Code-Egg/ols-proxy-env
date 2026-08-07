@@ -227,6 +227,7 @@ cat >> "$CONF_ROOT/httpd_config.conf.tmp" <<EOF
 listener HTTPS {
     address                 *:443
     secure                  1
+    enableQuic              1
     keyFile                 $TLS_KEY
     certFile                $TLS_CERT
     certChain               1

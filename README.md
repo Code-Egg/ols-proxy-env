@@ -6,7 +6,7 @@ The configuration includes:
 
 - A per-VH OLS proxy External App (`proxy_backend`, `proxy_backend2`, and so on).
 - A RewriteRule that proxies all requests to the backend.
-- HTTP and HTTPS listeners on ports `80` and `443`.
+- HTTP and HTTPS listeners on ports `80` and `443`, including UDP `443` for HTTP/3 QUIC.
 - OpenLiteSpeed native ACME certificate management.
 
 ## Configuration
