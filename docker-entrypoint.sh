@@ -98,17 +98,17 @@ function brace_delta(line, opens, closes) {
     return length(opens) - length(closes)
 }
 
-skip_listener {
-    listener_depth += brace_delta($0)
-    if (listener_depth <= 0) {
-        skip_listener = 0
+skip_block {
+    block_depth += brace_delta($0)
+    if (block_depth <= 0) {
+        skip_block = 0
     }
     next
 }
 
-/^[[:space:]]*listener[[:space:]]+[^\{]+\{/ {
-    listener_depth = brace_delta($0)
-    skip_listener = 1
+/^[[:space:]]*(listener|vhTemplate)[[:space:]]+[^\{]+\{/ {
+    block_depth = brace_delta($0)
+    skip_block = 1
     next
 }
 
