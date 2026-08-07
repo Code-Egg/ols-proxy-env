@@ -4,7 +4,7 @@ This project runs the official `litespeedtech/openlitespeed` image as a Dockeriz
 
 The configuration includes:
 
-- An OLS `proxy_backend` External App.
+- A per-VH OLS proxy External App (`proxy_backend`, `proxy_backend2`, and so on).
 - A RewriteRule that proxies all requests to the backend.
 - HTTP and HTTPS listeners on ports `80` and `443`.
 - OpenLiteSpeed native ACME certificate management.
@@ -40,7 +40,7 @@ DOMAIN, BACKEND_IP, BACKEND_PORT, PROXY_SOCKET
 second.example.com, backend-service, 8080, false
 ```
 
-The primary `.env` domain remains the `Example` virtual host. Each line in `domains.conf` creates an additional virtual host named from the domain, an independent proxy External App, an HTTP/HTTPS listener mapping, and its own ACME-enabled VHost configuration. Do not add `OLS_IMAGE` or `ACME_EMAIL` to `domains.conf`; those settings remain global in `.env`.
+The primary `.env` domain remains the `Example` virtual host. Each line in `domains.conf` creates an additional virtual host named from the domain, an independent proxy External App, an HTTP/HTTPS listener mapping, and its own ACME-enabled VHost configuration. The primary VHost uses `proxy_backend`; additional VHosts use `proxy_backend2`, `proxy_backend3`, and so on. Do not add `OLS_IMAGE` or `ACME_EMAIL` to `domains.conf`; those settings remain global in `.env`.
 
 `PROXY_SOCKET` must be exactly `true` or `false`. When it is `true`, the WebSocket backend uses the same host and port from that line. The parser rejects missing fields, invalid domains, invalid backend hosts, invalid ports, invalid Boolean values, duplicate domains, and extra comma-separated fields.
 
@@ -113,6 +113,8 @@ OpenLiteSpeed native ACME is enabled at both the server level with `tuning { acm
 The image also installs `git`, which is required by the native ACME installer to obtain `acme.sh`. When `ACME_EMAIL` is empty, the entrypoint uses the standard installation command without the advanced email option. When `ACME_EMAIL` is not empty, it uses the advanced installation command with `-e "$ACME_EMAIL"`. Use a real email address if you choose the advanced option.
 
 The catch-all proxy rule excludes `/.well-known/acme-challenge/` so OLS native `mod_acme` can handle its stateless challenge response directly. No custom static challenge context is used.
+
+Each VHost writes separate access and error logs with `useServer 0`, so VHost errors are not merged into the server error log.
 
 The complete `/usr/local/lsws` directory is stored in the Docker named volume `lsws_data`. This preserves the ACME installation, account data, configuration, logs, and certificates. Certificates are managed by OLS under `/usr/local/lsws/conf/cert/acme/certs`.
 

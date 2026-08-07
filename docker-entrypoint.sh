@@ -246,6 +246,11 @@ for index in "${!DOMAINS[@]}"; do
     backend_port="${BACKEND_PORTS[$index]}"
     socket="${SOCKETS[$index]}"
     vh_name="${VH_NAMES[$index]}"
+    if [[ "$index" == 0 ]]; then
+        proxy_name=proxy_backend
+    else
+        proxy_name="proxy_backend$((index + 1))"
+    fi
     vhost_root="/var/www/vhosts/$vh_name"
     vhost_conf="$CONF_ROOT/vhosts/$vh_name/vhconf.conf"
 
@@ -256,7 +261,7 @@ docRoot                 $vhost_root/html/
 indexFiles              index.html
 
 errorlog $SERVER_ROOT/logs/$vh_name.error.log {
-    useServer             1
+    useServer             0
 }
 
 accesslog $SERVER_ROOT/logs/$vh_name.access.log {
@@ -272,7 +277,7 @@ vhssl {
     }
 }
 
-extprocessor proxy_backend {
+extprocessor $proxy_name {
     type                    proxy
     address                 http://${backend}:${backend_port}
     maxConns                100
@@ -287,7 +292,7 @@ rewrite  {
     autoLoadHtaccess        0
     logLevel                0
     RewriteCond             %{REQUEST_URI} !^/\.well-known/acme-challenge/
-    RewriteRule             ^(.*)$ HTTP://proxy_backend/\$1 [P,L,E=PROXY-HOST:${domain}]
+    RewriteRule             ^(.*)$ HTTP://$proxy_name/\$1 [P,L,E=PROXY-HOST:${domain}]
 }
 EOF
 
