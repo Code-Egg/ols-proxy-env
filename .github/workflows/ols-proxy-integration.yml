@@ -2,9 +2,23 @@ name: OpenLiteSpeed integration test
 
 on:
   pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'docker-entrypoint.sh'
+      - 'domains.conf'
+      - '.env.example'
+      - '.github/workflows/ols-proxy-integration.yml'
   push:
     branches:
       - main
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'docker-entrypoint.sh'
+      - 'domains.conf'
+      - '.env.example'
+      - '.github/workflows/ols-proxy-integration.yml'
 
 jobs:
   reverse-proxy:
@@ -46,12 +60,24 @@ jobs:
       - name: Start OpenLiteSpeed
         run: docker compose start ols-proxy
 
+      - name: Wait for OpenLiteSpeed
+        run: |
+          for attempt in {1..60}; do
+            if docker compose exec -T ols-proxy /usr/local/lsws/bin/lswsctrl status 2>/dev/null | grep -q 'litespeed is running with PID'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs ols-proxy
+          exit 1
+
       - name: Verify HTTP reverse proxy through port 80
         run: |
           curl --fail --silent --show-error \
             --retry 30 \
             --retry-delay 2 \
             --retry-connrefused \
+            --retry-all-errors \
             -H 'Host: test.example.test' \
             http://127.0.0.1/
 
