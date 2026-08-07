@@ -1,0 +1,73 @@
+name: OpenLiteSpeed integration test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  reverse-proxy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure test environment
+        shell: bash
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's/^BACKEND_IP=.*/BACKEND_IP=test-backend/' \
+            -e 's/^BACKEND_PORT=.*/BACKEND_PORT=8080/' \
+            -e 's/^DOMAIN=.*/DOMAIN=test.example.test/' \
+            -e 's/^ACME_EMAIL=.*/ACME_EMAIL=/' \
+            -e 's/^PROXY_SOCKET=.*/PROXY_SOCKET=false/' \
+            .env
+
+      - name: Validate Compose configuration
+        run: docker compose config
+
+      - name: Build the OLS proxy image
+        run: docker compose build ols-proxy
+
+      - name: Create the OLS proxy container
+        run: docker compose create ols-proxy
+
+      - name: Start a lightweight backend on the shared network
+        run: |
+          docker run -d \
+            --name test-backend \
+            --network ls-net \
+            busybox:1.36 \
+            sh -c 'mkdir -p /www && printf "backend-ok\n" > /www/index.html && httpd -f -p 8080 -h /www'
+
+      - name: Start OpenLiteSpeed
+        run: docker compose start ols-proxy
+
+      - name: Verify HTTP reverse proxy through port 80
+        run: |
+          curl --fail --silent --show-error \
+            --retry 30 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            -H 'Host: test.example.test' \
+            http://127.0.0.1/
+
+      - name: Verify generated OLS configuration
+        run: |
+          docker compose exec -T ols-proxy grep -Fq 'test-backend' /usr/local/lsws/conf/httpd_config.conf
+          docker compose exec -T ols-proxy grep -Fq 'proxy_backend' /usr/local/lsws/conf/httpd_config.conf
+
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          docker compose logs ols-proxy
+          docker logs test-backend || true
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f test-backend 2>/dev/null || true
+          docker compose down -v
