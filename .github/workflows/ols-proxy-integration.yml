@@ -2,23 +2,13 @@ name: OpenLiteSpeed integration test
 
 on:
   pull_request:
-    paths:
-      - 'Dockerfile'
-      - 'docker-compose.yml'
-      - 'docker-entrypoint.sh'
-      - 'domains.conf'
-      - '.env.example'
-      - '.github/workflows/ols-proxy-integration.yml'
+    paths-ignore:
+      - 'README.md'
   push:
     branches:
       - main
-    paths:
-      - 'Dockerfile'
-      - 'docker-compose.yml'
-      - 'docker-entrypoint.sh'
-      - 'domains.conf'
-      - '.env.example'
-      - '.github/workflows/ols-proxy-integration.yml'
+    paths-ignore:
+      - 'README.md'
 
 jobs:
   reverse-proxy:
@@ -83,8 +73,9 @@ jobs:
 
       - name: Verify generated OLS configuration
         run: |
-          docker compose exec -T ols-proxy grep -Fq 'test-backend' /usr/local/lsws/conf/httpd_config.conf
-          docker compose exec -T ols-proxy grep -Fq 'proxy_backend' /usr/local/lsws/conf/httpd_config.conf
+          docker compose exec -T ols-proxy grep -Fq 'test.example.test' /usr/local/lsws/conf/httpd_config.conf
+          docker compose exec -T ols-proxy grep -Fq 'test-backend' /usr/local/lsws/conf/vhosts/Example/vhconf.conf
+          docker compose exec -T ols-proxy grep -Fq 'proxy_backend' /usr/local/lsws/conf/vhosts/Example/vhconf.conf
 
       - name: Show container logs on failure
         if: failure()
