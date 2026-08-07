@@ -307,7 +307,9 @@ EOF
     fi
 done
 
-chown -R lsadm:lsadm "$CONF_ROOT" /var/www/vhosts "$SERVER_ROOT/logs"
+chown -R lsadm:lsadm "$CONF_ROOT"
+chown -R root:root /var/www/vhosts
+chmod -R u=rwX,go=rX /var/www/vhosts
 chmod -R u=rwX,go= "$SERVER_ROOT/admin/conf"
 
 "$SERVER_ROOT/bin/lswsctrl" start
