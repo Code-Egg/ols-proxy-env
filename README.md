@@ -106,43 +106,19 @@ docker compose ps
 docker compose logs -f ols-proxy
 ```
 
-## Automatic HTTPS certificate
-
-OpenLiteSpeed native ACME is enabled at both the server level with `tuning { acme 2 }` and explicitly for the `Example` vhost with `vhssl { acme { enabled 2 } }`. On the first startup, the container runs the image's `/usr/local/lsws/admin/misc/install_acme.sh` once, then OLS creates and renews the certificate when the secure listener and vhost are loaded.
-
-The image also installs `git`, which is required by the native ACME installer to obtain `acme.sh`. When `ACME_EMAIL` is empty, the entrypoint uses the standard installation command without the advanced email option. When `ACME_EMAIL` is not empty, it uses the advanced installation command with `-e "$ACME_EMAIL"`. Use a real email address if you choose the advanced option.
-
-The catch-all proxy rule excludes `/.well-known/acme-challenge/` so OLS native `mod_acme` can handle its stateless challenge response directly. No custom static challenge context is used.
-
-Each VHost writes separate access and error logs with `useServer 0`, so VHost errors are not merged into the server error log.
-
-The complete `/usr/local/lsws` directory is stored in the Docker named volume `lsws_data`. This preserves the ACME installation, account data, configuration, logs, and certificates. Certificates are managed by OLS under `/usr/local/lsws/conf/cert/acme/certs`.
-
-The domain must resolve to the Docker host, and inbound TCP port `80` must be reachable by Let's Encrypt. The default `www.example.com` value is only an example and will not issue a certificate unless it points to your server.
-
-## WebAdmin password
-
-WebAdmin port `7080` is disabled by default in `docker-compose.yml`. If you need to access WebAdmin, uncomment `- "7080:7080"` under `ports`, then recreate the container:
+WebAdmin port `7080` is disabled by default. If needed, uncomment `- "7080:7080"` under `ports`, then recreate the container:
 
 ```sh
 docker compose up -d
 ```
 
-After finishing WebAdmin changes, comment the port again and recreate the container to stop publishing it.
-
-Do not commit a WebAdmin password to `.env`. Environment files are plain text and can also be exposed through Docker inspection or operational tooling. For a first-time setup, set or reset the password interactively with the official OLS utility:
+Set or reset the WebAdmin password interactively:
 
 ```sh
 docker compose exec ols-proxy /usr/local/lsws/admin/misc/admpass.sh
 ```
 
-Use the `admin` username when prompted. The WebAdmin credentials are stored in the persisted `lsws_data` volume. Storing a password in `.env` is common for local development, but Docker secrets or an external secret manager are preferable for production.
-
-When `7080` is temporarily enabled, restrict it with a firewall or trusted network. Do not expose WebAdmin publicly unless it is specifically required.
-
-## Configuration reload behavior
-
-`docker-entrypoint.sh` regenerates the primary and additional virtual host and proxy configuration on every container start. The ACME installation itself runs only when `/usr/local/lsws/acme/acme.sh` does not exist. OLS manages subsequent certificate renewal.
+The entrypoint regenerates the VHost and proxy configuration on every container start. ACME installation runs only when it is not already present, and the `lsws_data` volume preserves OLS configuration and certificates.
 
 Changing `.env` requires restarting the container:
 
@@ -151,22 +127,8 @@ docker compose down
 docker compose up -d
 ```
 
-Changing `Dockerfile` or `docker-entrypoint.sh` requires rebuilding:
+Changing `domains.conf` only requires restarting the container. Changing `Dockerfile` or `docker-entrypoint.sh` requires rebuilding:
 
 ```sh
 docker compose up -d --build
 ```
-
-## Security notes
-
-No Internet-facing service can be guaranteed to be completely secure. This project applies basic defensive measures:
-
-- Validates the backend port, domain, and backend address before writing OLS configuration.
-- Keeps the OpenLiteSpeed WebAdmin port `7080` disabled by default; enable it only temporarily and restrict it with a firewall or trusted network.
-- Enables Docker's `no-new-privileges` security option.
-- Keeps the backend destination controlled by `.env`, rather than accepting it from a request.
-- Persists the complete OLS directory, including ACME state and certificates.
-
-For production use, pin `OLS_IMAGE` to a specific version, keep Docker and the image updated, restrict inbound firewall rules, and use a real ACME email address.
-
-If the backend runs in another Docker Compose project, make sure the proxy can reach it through a shared Docker network or a routable host address. If the backend runs on the Docker host, use `host.docker.internal` rather than `127.0.0.1`.
