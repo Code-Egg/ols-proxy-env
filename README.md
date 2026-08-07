@@ -1,6 +1,6 @@
 # OpenLiteSpeed Docker Reverse Proxy
 
-This project runs the official `litespeedtech/openlitespeed` image as a Dockerized OpenLiteSpeed reverse proxy. It uses the default `Example` virtual host directly instead of a virtual-host template.
+This project runs the official `litespeedtech/openlitespeed` image as a Dockerized OpenLiteSpeed reverse proxy. The primary `.env` domain uses the default `Example` virtual host, and optional additional domains use standalone virtual hosts instead of virtual-host templates.
 
 The configuration includes:
 
@@ -30,6 +30,25 @@ ACME_EMAIL=
 `BACKEND_IP` is the backend host, not necessarily a numeric IP address. It may be an IP address, DNS hostname, or Docker service/container name such as `backend-service` when both containers share a Docker network. Use the backend container port in that case; for example, `backend-service:8080`, not the host-published port from a `host-port:container-port` mapping.
 
 Set `PROXY_SOCKET=true` to add an OpenLiteSpeed WebSocket proxy block. By default, it reuses `BACKEND_IP` and `BACKEND_PORT`, which is the usual setup when HTTP and WebSocket traffic belong to the same application. Set `PROXY_SOCKET_IP` and `PROXY_SOCKET_PORT` only when the WebSocket service uses a different backend.
+
+## Additional domains
+
+The `.env` configuration always defines the primary single-domain proxy and remains backward compatible. If additional domains are required, add one valid entry per line to `domains.conf`:
+
+```text
+DOMAIN, BACKEND_IP, BACKEND_PORT, PROXY_SOCKET
+second.example.com, backend-service, 8080, false
+```
+
+The primary `.env` domain remains the `Example` virtual host. Each line in `domains.conf` creates an additional virtual host named from the domain, an independent proxy External App, an HTTP/HTTPS listener mapping, and its own ACME-enabled VHost configuration. Do not add `OLS_IMAGE` or `ACME_EMAIL` to `domains.conf`; those settings remain global in `.env`.
+
+`PROXY_SOCKET` must be exactly `true` or `false`. When it is `true`, the WebSocket backend uses the same host and port from that line. The parser rejects missing fields, invalid domains, invalid backend hosts, invalid ports, invalid Boolean values, duplicate domains, and extra comma-separated fields.
+
+The file is mounted read-only into the container, so changing `domains.conf` does not require an image rebuild. Restart the proxy after changes:
+
+```sh
+docker compose up -d
+```
 
 ## Connect another Docker stack
 
@@ -121,7 +140,7 @@ When `7080` is temporarily enabled, restrict it with a firewall or trusted netwo
 
 ## Configuration reload behavior
 
-`docker-entrypoint.sh` regenerates the Example vhost and proxy configuration on every container start. The ACME installation itself runs only when `/usr/local/lsws/acme/acme.sh` does not exist. OLS manages subsequent certificate renewal.
+`docker-entrypoint.sh` regenerates the primary and additional virtual host and proxy configuration on every container start. The ACME installation itself runs only when `/usr/local/lsws/acme/acme.sh` does not exist. OLS manages subsequent certificate renewal.
 
 Changing `.env` requires restarting the container:
 
@@ -141,7 +160,7 @@ docker compose up -d --build
 No Internet-facing service can be guaranteed to be completely secure. This project applies basic defensive measures:
 
 - Validates the backend port, domain, and backend address before writing OLS configuration.
-- Exposes the OpenLiteSpeed WebAdmin port `7080` as requested; restrict it with a firewall or trusted network.
+- Keeps the OpenLiteSpeed WebAdmin port `7080` disabled by default; enable it only temporarily and restrict it with a firewall or trusted network.
 - Enables Docker's `no-new-privileges` security option.
 - Keeps the backend destination controlled by `.env`, rather than accepting it from a request.
 - Persists the complete OLS directory, including ACME state and certificates.

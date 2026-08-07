@@ -4,52 +4,134 @@ set -Eeuo pipefail
 : "${BACKEND_IP:?BACKEND_IP is required}"
 : "${BACKEND_PORT:?BACKEND_PORT is required}"
 : "${DOMAIN:?DOMAIN is required}"
+
 PROXY_SOCKET="${PROXY_SOCKET:-false}"
 PROXY_SOCKET_IP="${PROXY_SOCKET_IP:-$BACKEND_IP}"
 PROXY_SOCKET_PORT="${PROXY_SOCKET_PORT:-$BACKEND_PORT}"
+DOMAINS_CONFIG=/etc/ols-proxy/domains.conf
 
-case "${PROXY_SOCKET,,}" in
-    true|false) ;;
-    *)
-        echo "PROXY_SOCKET must be true or false" >&2
-        exit 1
-        ;;
-esac
+trim() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
 
-if [[ ! "$BACKEND_PORT" =~ ^[0-9]+$ ]] || (( BACKEND_PORT < 1 || BACKEND_PORT > 65535 )); then
-    echo "BACKEND_PORT must be an integer between 1 and 65535" >&2
-    exit 1
-fi
-
-if [[ ! "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]]; then
-    echo "DOMAIN contains unsupported characters" >&2
-    exit 1
-fi
-
-if [[ ! "$BACKEND_IP" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
-    echo "BACKEND_IP contains unsupported characters" >&2
-    exit 1
-fi
-
-if [[ "${PROXY_SOCKET,,}" == "true" ]]; then
-    : "${PROXY_SOCKET_IP:?PROXY_SOCKET_IP is required when PROXY_SOCKET=true}"
-    : "${PROXY_SOCKET_PORT:?PROXY_SOCKET_PORT is required when PROXY_SOCKET=true}"
-
-    if [[ ! "$PROXY_SOCKET_PORT" =~ ^[0-9]+$ ]] || (( PROXY_SOCKET_PORT < 1 || PROXY_SOCKET_PORT > 65535 )); then
-        echo "PROXY_SOCKET_PORT must be an integer between 1 and 65535" >&2
+validate_domain() {
+    local domain="$1"
+    if [[ ${#domain} -gt 253 ]] || [[ ! "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]]; then
+        echo "Invalid domain: $domain" >&2
         exit 1
     fi
+}
 
-    if [[ ! "$PROXY_SOCKET_IP" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
-        echo "PROXY_SOCKET_IP contains unsupported characters" >&2
+validate_host() {
+    local host="$1"
+    if [[ ! "$host" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
+        echo "Invalid backend host: $host" >&2
         exit 1
     fi
+}
+
+validate_port() {
+    local name="$1"
+    local port="$2"
+    if [[ ! "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+        echo "$name must be an integer between 1 and 65535" >&2
+        exit 1
+    fi
+}
+
+validate_socket() {
+    local name="$1"
+    local value="${2,,}"
+    if [[ "$value" != true && "$value" != false ]]; then
+        echo "$name must be true or false" >&2
+        exit 1
+    fi
+}
+
+validate_domain "$DOMAIN"
+validate_host "$BACKEND_IP"
+validate_port BACKEND_PORT "$BACKEND_PORT"
+validate_socket PROXY_SOCKET "$PROXY_SOCKET"
+
+if [[ "${PROXY_SOCKET,,}" == true ]]; then
+    validate_host "$PROXY_SOCKET_IP"
+    validate_port PROXY_SOCKET_PORT "$PROXY_SOCKET_PORT"
+fi
+
+declare -a DOMAINS=("$DOMAIN")
+declare -a BACKENDS=("$BACKEND_IP")
+declare -a BACKEND_PORTS=("$BACKEND_PORT")
+declare -a SOCKETS=("${PROXY_SOCKET,,}")
+declare -a VH_NAMES=(Example)
+declare -A SEEN_DOMAINS
+declare -A SEEN_VH_NAMES
+SEEN_DOMAINS["${DOMAIN,,}"]=1
+SEEN_VH_NAMES[Example]=1
+
+if [[ -e "$DOMAINS_CONFIG" && ! -f "$DOMAINS_CONFIG" ]]; then
+    echo "$DOMAINS_CONFIG must be a regular file" >&2
+    exit 1
+fi
+
+if [[ -f "$DOMAINS_CONFIG" ]]; then
+    line_number=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line_number=$((line_number + 1))
+        line="${line%$'\r'}"
+        trimmed_line="$(trim "$line")"
+        [[ -z "$trimmed_line" || "$trimmed_line" == \#* ]] && continue
+
+        field_count="$(awk -F',' '{print NF}' <<< "$line")"
+        if [[ "$field_count" != 4 ]]; then
+            echo "$DOMAINS_CONFIG:$line_number must contain exactly 4 comma-separated fields" >&2
+            exit 1
+        fi
+
+        IFS=',' read -r domain backend backend_port socket <<< "$line"
+        domain="$(trim "$domain")"
+        backend="$(trim "$backend")"
+        backend_port="$(trim "$backend_port")"
+        socket="$(trim "$socket")"
+
+        [[ -n "$domain" ]] || { echo "$DOMAINS_CONFIG:$line_number has an empty domain" >&2; exit 1; }
+        [[ -n "$backend" ]] || { echo "$DOMAINS_CONFIG:$line_number has an empty backend host" >&2; exit 1; }
+        [[ -n "$backend_port" ]] || { echo "$DOMAINS_CONFIG:$line_number has an empty backend port" >&2; exit 1; }
+        [[ -n "$socket" ]] || { echo "$DOMAINS_CONFIG:$line_number has an empty PROXY_SOCKET value" >&2; exit 1; }
+
+        validate_domain "$domain"
+        validate_host "$backend"
+        validate_port "$DOMAINS_CONFIG:$line_number backend port" "$backend_port"
+        validate_socket "$DOMAINS_CONFIG:$line_number PROXY_SOCKET" "$socket"
+
+        domain_key="${domain,,}"
+        if [[ -n "${SEEN_DOMAINS[$domain_key]+x}" ]]; then
+            echo "Duplicate domain: $domain" >&2
+            exit 1
+        fi
+
+        vh_name="VH_${domain//[^A-Za-z0-9]/_}"
+        if [[ ${#vh_name} -gt 200 ]]; then
+            vh_name="${vh_name:0:180}_$line_number"
+        fi
+        if [[ -n "${SEEN_VH_NAMES[$vh_name]+x}" ]]; then
+            vh_name="${vh_name}_$line_number"
+        fi
+
+        SEEN_DOMAINS["$domain_key"]=1
+        SEEN_VH_NAMES["$vh_name"]=1
+        DOMAINS+=("$domain")
+        BACKENDS+=("$backend")
+        BACKEND_PORTS+=("$backend_port")
+        SOCKETS+=("${socket,,}")
+        VH_NAMES+=("$vh_name")
+    done < "$DOMAINS_CONFIG"
 fi
 
 SERVER_ROOT=/usr/local/lsws
 CONF_ROOT="$SERVER_ROOT/conf"
-VHOST_ROOT=/var/www/vhosts/Example
-VHOST_CONF="$CONF_ROOT/vhosts/Example/vhconf.conf"
 BASE_CONFIG="$CONF_ROOT/httpd_config.conf.ols-proxy-base"
 
 if [[ ! -f "$CONF_ROOT/httpd_config.conf" ]]; then
@@ -70,8 +152,7 @@ if [[ ! -f "$SERVER_ROOT/acme/acme.sh" ]]; then
     fi
 fi
 
-mkdir -p "$CONF_ROOT/vhosts/Example" "$VHOST_ROOT/html/.well-known/acme-challenge" \
-    "$SERVER_ROOT/logs"
+mkdir -p "$CONF_ROOT/vhosts/Example" "$SERVER_ROOT/logs"
 
 if [[ ! -f "$BASE_CONFIG" ]]; then
     cp "$CONF_ROOT/httpd_config.conf" "$BASE_CONFIG"
@@ -115,21 +196,32 @@ skip_block {
 { print }
 ' "$BASE_CONFIG" > "$CONF_ROOT/httpd_config.conf.tmp"
 
-cat >> "$CONF_ROOT/httpd_config.conf.tmp" <<EOF
+for index in "${!DOMAINS[@]}"; do
+    vh_name="${VH_NAMES[$index]}"
+    vhost_root="/var/www/vhosts/$vh_name"
+    cat >> "$CONF_ROOT/httpd_config.conf.tmp" <<EOF
 
-virtualhost Example {
-    vhRoot                  $VHOST_ROOT/
-    configFile              conf/vhosts/Example/vhconf.conf
+virtualhost $vh_name {
+    vhRoot                  $vhost_root/
+    configFile              conf/vhosts/$vh_name/vhconf.conf
     allowSymbolLink         1
     enableScript            1
     restrained              1
     setUIDMode              0
 }
+EOF
+done
+
+cat >> "$CONF_ROOT/httpd_config.conf.tmp" <<EOF
 
 listener HTTP {
     address                 *:80
     secure                  0
-    map                     Example $DOMAIN
+EOF
+for index in "${!DOMAINS[@]}"; do
+    printf '    map                     %s %s\n' "${VH_NAMES[$index]}" "${DOMAINS[$index]}" >> "$CONF_ROOT/httpd_config.conf.tmp"
+done
+cat >> "$CONF_ROOT/httpd_config.conf.tmp" <<EOF
 }
 
 listener HTTPS {
@@ -138,21 +230,36 @@ listener HTTPS {
     keyFile                 $TLS_KEY
     certFile                $TLS_CERT
     certChain               1
-    map                     Example $DOMAIN
+EOF
+for index in "${!DOMAINS[@]}"; do
+    printf '    map                     %s %s\n' "${VH_NAMES[$index]}" "${DOMAINS[$index]}" >> "$CONF_ROOT/httpd_config.conf.tmp"
+done
+cat >> "$CONF_ROOT/httpd_config.conf.tmp" <<EOF
 }
 EOF
 
 mv "$CONF_ROOT/httpd_config.conf.tmp" "$CONF_ROOT/httpd_config.conf"
 
-cat > "$VHOST_CONF" <<EOF
-docRoot                 $VHOST_ROOT/html/
+for index in "${!DOMAINS[@]}"; do
+    domain="${DOMAINS[$index]}"
+    backend="${BACKENDS[$index]}"
+    backend_port="${BACKEND_PORTS[$index]}"
+    socket="${SOCKETS[$index]}"
+    vh_name="${VH_NAMES[$index]}"
+    vhost_root="/var/www/vhosts/$vh_name"
+    vhost_conf="$CONF_ROOT/vhosts/$vh_name/vhconf.conf"
+
+    mkdir -p "$CONF_ROOT/vhosts/$vh_name" "$vhost_root/html" "$vhost_root/html/.well-known/acme-challenge"
+
+    cat > "$vhost_conf" <<EOF
+docRoot                 $vhost_root/html/
 indexFiles              index.html
 
-errorlog $SERVER_ROOT/logs/Example.error.log {
+errorlog $SERVER_ROOT/logs/$vh_name.error.log {
     useServer             1
 }
 
-accesslog $SERVER_ROOT/logs/Example.access.log {
+accesslog $SERVER_ROOT/logs/$vh_name.access.log {
     useServer             0
     rollingSize           10M
     keepDays              7
@@ -167,7 +274,7 @@ vhssl {
 
 extprocessor proxy_backend {
     type                    proxy
-    address                 http://${BACKEND_IP}:${BACKEND_PORT}
+    address                 http://${backend}:${backend_port}
     maxConns                100
     pcKeepAliveTimeout      60
     initTimeout             60
@@ -180,20 +287,27 @@ rewrite  {
     autoLoadHtaccess        0
     logLevel                0
     RewriteCond             %{REQUEST_URI} !^/\.well-known/acme-challenge/
-    RewriteRule             ^(.*)$ HTTP://proxy_backend/\$1 [P,L,E=PROXY-HOST:${DOMAIN}]
+    RewriteRule             ^(.*)$ HTTP://proxy_backend/\$1 [P,L,E=PROXY-HOST:${domain}]
 }
 EOF
 
-if [[ "${PROXY_SOCKET,,}" == "true" ]]; then
-    cat >> "$VHOST_CONF" <<EOF
+    if [[ "$socket" == true ]]; then
+        socket_ip="$backend"
+        socket_port="$backend_port"
+        if [[ "$index" == 0 ]]; then
+            socket_ip="$PROXY_SOCKET_IP"
+            socket_port="$PROXY_SOCKET_PORT"
+        fi
+        cat >> "$vhost_conf" <<EOF
 
 websocket / {
-    address                 ${PROXY_SOCKET_IP}:${PROXY_SOCKET_PORT}
+    address                 ${socket_ip}:${socket_port}
 }
 EOF
-fi
+    fi
+done
 
-chown -R lsadm:lsadm "$CONF_ROOT" "$VHOST_ROOT" "$SERVER_ROOT/logs"
+chown -R lsadm:lsadm "$CONF_ROOT" /var/www/vhosts "$SERVER_ROOT/logs"
 chmod -R u=rwX,go= "$SERVER_ROOT/admin/conf"
 
 "$SERVER_ROOT/bin/lswsctrl" start

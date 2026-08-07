@@ -14,6 +14,7 @@ services:
       # - "7080:7080"
     volumes:
       - lsws_data:/usr/local/lsws
+      - ./domains.conf:/etc/ols-proxy/domains.conf:ro
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

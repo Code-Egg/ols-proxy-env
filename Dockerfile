@@ -6,6 +6,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY docker-entrypoint.sh /usr/local/bin/ols-proxy-entrypoint.sh
+COPY domains.conf /etc/ols-proxy/domains.conf
 RUN chmod +x /usr/local/bin/ols-proxy-entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/ols-proxy-entrypoint.sh"]
