@@ -64,10 +64,13 @@ jobs:
       - name: Verify HTTP reverse proxy through port 80
         run: |
           curl --fail --show-error \
+            --include \
+            --verbose \
             --retry 30 \
             --retry-delay 2 \
             --retry-connrefused \
             --retry-all-errors \
+            --write-out '\nHTTP_STATUS=%{http_code}\nREMOTE_IP=%{remote_ip}\nHTTP_VERSION=%{http_version}\nCONNECT=%{time_connect}s\nTOTAL=%{time_total}s\n' \
             -H 'Host: test.example.test' \
             http://127.0.0.1/
 
