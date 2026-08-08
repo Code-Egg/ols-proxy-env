@@ -83,7 +83,7 @@ docker network connect ls-net <backend-container-name>
 
 Use the container's internal listening port, not a host port mapping. For example, a `3000:8080` mapping is reached from OLS as `backend:8080` when both containers use `ls-net`.
 
-## Start and stop
+## Start command
 
 Start the proxy:
 
@@ -93,32 +93,12 @@ docker compose up -d
 
 The first startup builds the local image automatically. It may also pull the selected OpenLiteSpeed base image.
 
-Stop it with:
-
-```sh
-docker compose down
-```
-
 View status and logs:
 
 ```sh
 docker compose ps
 docker compose logs -f ols-proxy
 ```
-
-WebAdmin port `7080` is disabled by default. If needed, uncomment `- "7080:7080"` under `ports`, then recreate the container:
-
-```sh
-docker compose up -d
-```
-
-Set or reset the WebAdmin password interactively:
-
-```sh
-docker compose exec ols-proxy /usr/local/lsws/admin/misc/admpass.sh
-```
-
-The entrypoint regenerates the VHost and proxy configuration on every container start. ACME installation runs only when it is not already present, and the `lsws_data` volume preserves OLS configuration and certificates.
 
 Changing `.env` requires restarting the container:
 
@@ -131,4 +111,20 @@ Changing `domains.conf` only requires restarting the container. Changing `Docker
 
 ```sh
 docker compose up -d --build
+```
+
+## FAQ
+
+### How to visit WebAdmin
+
+WebAdmin port `7080` is disabled by default. If needed, uncomment `- "7080:7080"` under `ports`, then recreate the container:
+
+```sh
+docker compose up -d
+```
+
+Set or reset the WebAdmin password interactively:
+
+```sh
+docker compose exec ols-proxy /usr/local/lsws/admin/misc/admpass.sh
 ```

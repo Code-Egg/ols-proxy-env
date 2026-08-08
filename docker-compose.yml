@@ -12,7 +12,7 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
-      # - "7080:7080"
+      #- "7080:7080"
     volumes:
       - lsws_data:/usr/local/lsws
       - ./domains.conf:/etc/ols-proxy/domains.conf:ro

@@ -63,7 +63,7 @@ jobs:
 
       - name: Verify HTTP reverse proxy through port 80
         run: |
-          curl --fail --silent --show-error \
+          curl --fail --show-error \
             --retry 30 \
             --retry-delay 2 \
             --retry-connrefused \
